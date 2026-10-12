@@ -1,0 +1,94 @@
+name: Build Android APK & Create GitHub Release
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release version tag (e.g. v1.0.0)'
+        required: false
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-android-apk:
+    name: Compile Web Bundle & Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Java JDK 21 for Android Gradle
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Dependencies & Build Production Web Assets
+        run: |
+          npm install
+          npm run build
+
+      - name: Install Capacitor Android CLI & Generate Android Project
+        run: |
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+          npx cap sync android
+
+      - name: Configure Android Manifest Cleartext & Internet Permissions
+        run: |
+          chmod +x android/gradlew
+
+      - name: Build Android APK (Debug & Release Unsigned)
+        working-directory: ./android
+        run: |
+          ./gradlew assembleDebug assembleRelease
+
+      - name: Prepare CineStream APK Artifacts
+        run: |
+          mkdir -p release-artifacts
+          cp android/app/build/outputs/apk/debug/app-debug.apk release-artifacts/CineStream-universal-debug.apk
+          if [ -f android/app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            cp android/app/build/outputs/apk/release/app-release-unsigned.apk release-artifacts/CineStream-universal-release-unsigned.apk
+          fi
+
+      - name: Upload APK Artifact to GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: CineStream-Android-APK
+          path: release-artifacts/*.apk
+
+      - name: Publish GitHub Release with APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v1.0.0' }}
+          name: "CineStream Universal Video Player & Downloader ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v1.0.0' }}"
+          body: |
+            ### CineStream — Universal Video Player & Authorized Downloader
+            - **Direct Stream Playback**: MP4, WebM, OGV
+            - **Adaptive Streaming**: HLS / M3U8 multi-bitrate support
+            - **Dark Cinematic Theme**: Slate-950 (`#020617`), Slate-900 (`#0F172A`), Sky-400 (`#38BDF8`)
+            - **Android Installation**: Download and install `CineStream-universal-debug.apk` directly on any Android 8.0+ device.
+          files: |
+            release-artifacts/*.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,6 @@
+{
+  "name": "CineStream — Universal Video Player & Downloader",
+  "description": "Premium dark cinematic universal video player and authorized stream downloader supporting direct MP4/WebM and adaptive HLS/M3U8 streams across Web and Android.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

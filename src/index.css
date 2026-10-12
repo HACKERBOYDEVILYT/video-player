@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+:root {
+  --noir-bg: #09090e;
+  --noir-surface: #13111c;
+  --noir-elevated: #1c1929;
+  --noir-border: #262235;
+  --noir-text: #f4f4f6;
+  --noir-muted: #9ca3af;
+  --noir-accent: #e11d48;
+  --noir-accent-hover: #f43f5e;
+  --noir-purple: #7c3aed;
+}
+
+html.light {
+  --noir-bg: #f8fafc;
+  --noir-surface: #ffffff;
+  --noir-elevated: #f1f5f9;
+  --noir-border: #e2e8f0;
+  --noir-text: #0f172a;
+  --noir-muted: #475569;
+  --noir-accent: #e11d48;
+  --noir-accent-hover: #be123c;
+  --noir-purple: #6d28d9;
+}
+
+@layer base {
+  body {
+    background-color: var(--noir-bg);
+    color: var(--noir-text);
+    font-family: var(--font-sans);
+    letter-spacing: 0.01em;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.noir-canvas {
+  background-color: var(--noir-bg);
+  color: var(--noir-text);
+}
+
+.noir-card {
+  background-color: var(--noir-surface);
+  border: 1px solid var(--noir-border);
+}
+
+.noir-subcard {
+  background-color: var(--noir-bg);
+  border: 1px solid var(--noir-border);
+}
+
+.noir-border {
+  border-color: var(--noir-border);
+}
+
+/* Custom sleek range slider for video timeline & volume in NOIR Crimson Red (#E11D48) */
+input[type='range'].noir-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type='range'].noir-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+}
+
+input[type='range'].noir-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  background: #e11d48;
+  border: 2px solid #09090e;
+  margin-top: -4px;
+  transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+input[type='range'].noir-slider:hover::-webkit-slider-thumb {
+  transform: scale(1.2);
+}
