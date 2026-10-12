@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { db, logAuditEvent } from './db';
-import { fetchWithSafeRedirects, sanitizeSafeFilename, maskSensitiveUrlForLog } from './security';
+import { db, logAuditEvent } from './db.ts';
+import { fetchWithSafeRedirects, sanitizeSafeFilename, maskSensitiveUrlForLog } from './security.ts';
 
 export const DOWNLOADS_DIR = path.resolve(process.cwd(), 'storage/downloads');
 

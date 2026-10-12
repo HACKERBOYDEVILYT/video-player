@@ -142,10 +142,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
 
       - name: Install Dependencies
-        run: npm install
+        run: npm install --no-audit --no-fund
 
       - name: Run TypeScript Typecheck & Linting
         run: npm run lint
@@ -154,10 +153,14 @@ jobs:
         run: npm test
 
       - name: Build Production Website & PWA Assets (Vite + Workbox)
+        env:
+          GITHUB_ACTIONS: 'true'
         run: npm run build
 
-      - name: Add SPA Fallback (404.html) for Static Hosting
-        run: cp dist/index.html dist/404.html
+      - name: Add SPA Fallback (404.html) & .nojekyll for GitHub Pages
+        run: |
+          cp dist/index.html dist/404.html
+          touch dist/.nojekyll
 
       - name: Upload Production Website Build Artifact
         uses: actions/upload-artifact@v4
@@ -165,9 +168,11 @@ jobs:
           name: noir-website-dist
           path: dist/
 
-      - name: Configure GitHub Pages
+      - name: Enable & Configure GitHub Pages Automatically
         if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Upload GitHub Pages Artifact
         if: github.event_name != 'pull_request'

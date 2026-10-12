@@ -1,17 +1,17 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express, { type Request, type Response, type NextFunction } from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { Readable } from 'stream';
-import { db, initDatabase, logAuditEvent } from './src/server/db';
+import { db, initDatabase, logAuditEvent } from './src/server/db.ts';
 import {
   validateUrlAndResolveDns,
   fetchWithSafeRedirects,
   sanitizeSafeFilename,
   verifyPassword,
   maskSensitiveUrlForLog,
-} from './src/server/security';
+} from './src/server/security.ts';
 import {
   getAllDownloadJobs,
   getDownloadJobById,
@@ -25,7 +25,7 @@ import {
   processDownloadQueue,
   getMaxDownloadSizeMb,
   setMaxDownloadSizeMb,
-} from './src/server/downloadManager';
+} from './src/server/downloadManager.ts';
 
 initDatabase();
 
