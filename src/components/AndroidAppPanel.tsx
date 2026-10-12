@@ -19,13 +19,180 @@ interface AndroidAppPanelProps {
   onToggleMobilePreview: () => void;
 }
 
+const RELEASE_YAML_CODE = `name: Android APK & Production Bundle Release (release.yml)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release version tag (e.g. v2.0.0)'
+        required: false
+        default: 'v2.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  android-apk-release:
+    name: Build Android APK & Publish GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Java JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Dependencies, Run Security Tests & Build Web Bundle
+        run: |
+          npm install
+          npm test
+          npm run lint
+          npm run build
+
+      - name: Sync Capacitor Android Project
+        run: |
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+          npx cap sync android
+
+      - name: Build Android Debug & Release APK / AAB
+        working-directory: ./android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug assembleRelease bundleRelease
+
+      - name: Package Release Artifacts (APK, AAB & Web Dist Zip)
+        run: |
+          mkdir -p release-artifacts
+          cp android/app/build/outputs/apk/debug/app-debug.apk release-artifacts/NOIR-Video-Studio-debug.apk
+          if [ -f android/app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            cp android/app/build/outputs/apk/release/app-release-unsigned.apk release-artifacts/NOIR-Video-Studio-release-unsigned.apk
+          fi
+          if [ -f android/app/build/outputs/bundle/release/app-release.aab ]; then
+            cp android/app/build/outputs/bundle/release/app-release.aab release-artifacts/NOIR-Video-Studio-release.aab
+          fi
+          tar -czf release-artifacts/NOIR-Video-Studio-web-bundle.tar.gz dist server.ts package.json capacitor.config.json
+
+      - name: Generate SHA-256 Checksums for Release Assets
+        working-directory: ./release-artifacts
+        run: sha256sum * > SHA256SUMS.txt
+
+      - name: Upload Artifacts to GitHub Actions Run
+        uses: actions/upload-artifact@v4
+        with:
+          name: NOIR-Video-Studio-Release-Bundle
+          path: release-artifacts/*
+
+      - name: Create GitHub Release & Attach APK / Web Bundle
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: \${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v2.0.0' }}
+          name: "NOIR Video Studio (Robiul Video Studio) \${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v2.0.0' }}"
+          files: release-artifacts/*
+        env:
+          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}`;
+
+const WEBSITE_YAML_CODE = `name: Website CI/CD Build, Test & Deploy (website.yml)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "website-deploy"
+  cancel-in-progress: true
+
+jobs:
+  build-and-test-website:
+    name: Lint, Security Test & Build Website Bundle
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run TypeScript Typecheck & Linting
+        run: npm run lint
+
+      - name: Run SSRF Security & Download Lifecycle Unit Tests
+        run: npm test
+
+      - name: Build Production Website & PWA Assets (Vite + Workbox)
+        run: npm run build
+
+      - name: Add SPA Fallback (404.html) for Static Hosting
+        run: cp dist/index.html dist/404.html
+
+      - name: Upload Production Website Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: noir-website-dist
+          path: dist/
+
+      - name: Configure GitHub Pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages Artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+
+  deploy-website:
+    name: Deploy Website to GitHub Pages
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    needs: build-and-test-website
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: \${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4`;
+
 const KOTLIN_EXOPLAYER_CODE = `// NOIR Video Studio (Robiul Video Studio) — Native Android Implementation
 // Features: Media3 ExoPlayer, Background Playback MediaSession, PiP, Foreground DownloadService, Scoped Storage
 package com.noir.videostudio
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -33,7 +200,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
-import androidx.core.app.NotificationCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -76,7 +242,6 @@ class NoirNativeMediaEngine(private val context: Context) {
         return player
     }
 
-    // Handle shared URL from Android Share Sheet (Intent.ACTION_SEND)
     fun extractSharedStreamUrl(intent: Intent?): String? {
         if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
             return intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
@@ -87,7 +252,6 @@ class NoirNativeMediaEngine(private val context: Context) {
         return null
     }
 
-    // Save completed download into Android 10+ Scoped Storage public Downloads folder
     fun saveToPublicDownloadsScoped(fileName: String, mimeType: String, bytes: ByteArray): Uri? {
         val resolver = context.contentResolver
         val contentValues = ContentValues().apply {
@@ -120,7 +284,6 @@ const ANDROID_MANIFEST_XML = `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.noir.videostudio">
 
-    <!-- Minimal required permissions: Internet, Foreground Service for Downloads & Media Playback -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -147,14 +310,12 @@ const ANDROID_MANIFEST_XML = `<?xml version="1.0" encoding="utf-8"?>
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Receive Shared Video URLs from Android Share Menu -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
 
-            <!-- Open With Media File Association (MP4, WebM, M3U8) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -170,93 +331,14 @@ const ANDROID_MANIFEST_XML = `<?xml version="1.0" encoding="utf-8"?>
     </application>
 </manifest>`;
 
-const GITHUB_WORKFLOW_YAML = `name: Build Android APK & Create GitHub Release
-
-on:
-  push:
-    branches: [ main, master ]
-    tags:
-      - 'v*'
-  workflow_dispatch:
-    inputs:
-      release_tag:
-        description: 'Release version tag (e.g. v2.0.0)'
-        required: false
-        default: 'v2.0.0'
-
-permissions:
-  contents: write
-
-jobs:
-  build-android-apk:
-    name: Compile Web Bundle & Build Android APK
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Setup Java JDK 21 for Android Gradle
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Dependencies, Run Security Tests & Build Web Assets
-        run: |
-          npm install
-          npm test
-          npm run build
-
-      - name: Install Capacitor Android CLI & Sync Native Project
-        run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/android
-          if [ ! -d "android" ]; then
-            npx cap add android
-          fi
-          npx cap sync android
-
-      - name: Build Android APK (Debug & Release)
-        working-directory: ./android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug assembleRelease
-
-      - name: Prepare NOIR Video Studio APK Artifacts
-        run: |
-          mkdir -p release-artifacts
-          cp android/app/build/outputs/apk/debug/app-debug.apk release-artifacts/NOIR-Video-Studio-debug.apk
-
-      - name: Upload APK Artifact to GitHub Actions
-        uses: actions/upload-artifact@v4
-        with:
-          name: NOIR-Video-Studio-APK
-          path: release-artifacts/*.apk
-
-      - name: Publish GitHub Release with APK
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: \${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v2.0.0' }}
-          name: "NOIR Video Studio (Robiul Video Studio) \${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v2.0.0' }}"
-          files: release-artifacts/*.apk
-        env:
-          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}`;
-
 export const AndroidAppPanel: React.FC<AndroidAppPanelProps> = ({
   mobilePreviewMode,
   onToggleMobilePreview,
 }) => {
   const { isInstallable, isInstalled, install } = usePWAInstall();
-  const [activeCodeTab, setActiveCodeTab] = useState<'kotlin' | 'manifest' | 'workflow'>('kotlin');
+  const [activeCodeTab, setActiveCodeTab] = useState<
+    'release_yml' | 'website_yml' | 'kotlin' | 'manifest'
+  >('release_yml');
   const [copied, setCopied] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedCli, setCopiedCli] = useState(false);
@@ -278,19 +360,22 @@ export const AndroidAppPanel: React.FC<AndroidAppPanelProps> = ({
   }, []);
 
   const currentCode =
-    activeCodeTab === 'kotlin'
+    activeCodeTab === 'release_yml'
+      ? RELEASE_YAML_CODE
+      : activeCodeTab === 'website_yml'
+      ? WEBSITE_YAML_CODE
+      : activeCodeTab === 'kotlin'
       ? KOTLIN_EXOPLAYER_CODE
-      : activeCodeTab === 'manifest'
-      ? ANDROID_MANIFEST_XML
-      : GITHUB_WORKFLOW_YAML;
+      : ANDROID_MANIFEST_XML;
 
   const gitReleaseCommands = `git init
 git add .
-git commit -m "feat: NOIR Video Studio (Robiul Video Studio) ${releaseTag}"
+git commit -m "feat: add release.yml and website.yml for NOIR Video Studio ${releaseTag}"
 git branch -M main
 git remote add origin https://github.com/${repoSlug}.git
+git push -u origin main
 git tag ${releaseTag}
-git push -u origin main --tags`;
+git push origin ${releaseTag}`;
 
   const handleCopyCode = async () => {
     await navigator.clipboard.writeText(currentCode);
@@ -316,11 +401,13 @@ git push -u origin main --tags`;
     const a = document.createElement('a');
     a.href = url;
     a.download =
-      activeCodeTab === 'kotlin'
+      activeCodeTab === 'release_yml'
+        ? 'release.yml'
+        : activeCodeTab === 'website_yml'
+        ? 'website.yml'
+        : activeCodeTab === 'kotlin'
         ? 'NoirNativeMediaEngine.kt'
-        : activeCodeTab === 'manifest'
-        ? 'AndroidManifest.xml'
-        : 'android-apk-release.yml';
+        : 'AndroidManifest.xml';
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -332,19 +419,19 @@ git push -u origin main --tags`;
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="max-w-2xl">
             <h2 className="text-lg sm:text-xl font-bold">
-              NOIR Video Studio — Android Native ও GitHub APK রিলিজ পোর্টাল
+              NOIR Video Studio — GitHub CI/CD (<code className="text-rose-400">release.yml</code> ও <code className="text-rose-400">website.yml</code>) এবং Android পোর্টাল
             </h2>
             <p className="mt-2 text-xs sm:text-sm text-zinc-300 leading-relaxed">
-              Android অ্যাপের জন্য Capacitor + Native Jetpack Media3 ExoPlayer, ফোরগ্রাউন্ড ডাউনলোড সার্ভিস, Android Share Menu ইন্টিগ্রেশন, Scoped Storage এবং GitHub Actions স্বয়ংক্রিয় APK রিলিজ পাইপলাইন সম্পূর্ণরূপে কনফিগার করা হয়েছে।
+              প্রজেক্টের <code className="font-mono text-rose-400">.github/workflows/release.yml</code> (Android APK, AAB এবং SHA-256 চেকসামসহ GitHub রিলিজ) এবং <code className="font-mono text-rose-400">.github/workflows/website.yml</code> (Website লিন্টিং, সিকিউরিটি টেস্ট, প্রোডাকশন বিল্ড ও স্বয়ংক্রিয় ওয়েবসাইট ডিপ্লয়মেন্ট) দুটিই যুক্ত করা হয়েছে।
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-400 font-mono tabular-nums">
-              <span className="text-rose-400">Package: com.noir.videostudio</span>
+              <span className="text-rose-400">release.yml (APK/AAB Release)</span>
+              <span aria-hidden="true">·</span>
+              <span className="text-emerald-400">website.yml (Website Deploy)</span>
               <span aria-hidden="true">·</span>
               <span>Media3 ExoPlayer</span>
               <span aria-hidden="true">·</span>
-              <span>Scoped Storage (Android 10–15)</span>
-              <span aria-hidden="true">·</span>
-              <span className="text-violet-400">Share Intent & PiP Ready</span>
+              <span className="text-violet-400">Scoped Storage Ready</span>
             </div>
           </div>
 
@@ -388,7 +475,7 @@ git push -u origin main --tags`;
           <div className="lg:col-span-5 space-y-3">
             <h3 className="text-xs font-bold flex items-center gap-2">
               <GitBranch className="w-4 h-4 text-rose-400" />
-              <span>GitHub রিলিজ কনফিগারেশন</span>
+              <span>GitHub রিলিজ ও ওয়েবসাইট ডিপ্লয়মেন্ট কনফিগারেশন</span>
             </h3>
 
             <div>
@@ -433,7 +520,7 @@ git push -u origin main --tags`;
             <div className="flex items-center justify-between gap-2 pb-2.5 border-b noir-border">
               <div className="flex items-center gap-2 text-xs font-semibold">
                 <Terminal className="w-4 h-4 text-rose-400" />
-                <span>GitHub APK Release Trigger Commands</span>
+                <span>GitHub Push & Tag Release Commands</span>
               </div>
               <button
                 onClick={handleCopyCli}
@@ -450,43 +537,63 @@ git push -u origin main --tags`;
         </div>
       </div>
 
-      {/* 3-Column Native Android Capability Overview */}
+      {/* 3-Column Native Android & CI/CD Capability Overview */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="noir-card rounded-2xl p-5">
           <div className="flex items-center gap-2.5 text-rose-400 mb-2">
             <Layers className="w-5 h-5" />
-            <h3 className="text-sm font-bold">১. Jetpack Media3 ও ব্যাকগ্রাউন্ড অডিও</h3>
+            <h3 className="text-sm font-bold">১. release.yml (APK, AAB ও SHA-256)</h3>
           </div>
           <p className="text-xs text-zinc-400 leading-relaxed">
-            MediaSession ইন্টিগ্রেশন, নোটিফিকেশন প্লেব্যাক কন্ট্রোল, অডিও ফোকাস হ্যান্ডলিং এবং নেটিভ Picture-in-Picture সাপোর্ট।
+            ট্যাগ পুশ করলেই স্বয়ংক্রিয়ভাবে Debug APK, Release Unsigned APK, Play Store AAB এবং SHA-256 চেকসাম তৈরি করে GitHub Releases-এ যুক্ত করে।
           </p>
         </div>
 
         <div className="noir-card rounded-2xl p-5">
           <div className="flex items-center gap-2.5 text-rose-400 mb-2">
             <ShieldCheck className="w-5 h-5" />
-            <h3 className="text-sm font-bold">২. Share Menu ও File Association</h3>
+            <h3 className="text-sm font-bold">২. website.yml (ওয়েবসাইট CI/CD ও ডিপ্লয়)</h3>
           </div>
           <p className="text-xs text-zinc-400 leading-relaxed">
-            অন্য যেকোনো অ্যাপের Share মেনু থেকে সরাসরি NOIR Video Studio-তে ভিডিও URL পাঠানো এবং লোকাল মিডিয়া ফাইল ওপেন করার সুবিধা।
+            প্রতিটি পুশে TypeScript লিন্ট, SSRF সিকিউরিটি ইউনিট টেস্ট, Vite প্রোডাকশন বিল্ড এবং স্বয়ংক্রিয় GitHub Pages ওয়েবসাইট ডিপ্লয়মেন্ট সম্পন্ন করে।
           </p>
         </div>
 
         <div className="noir-card rounded-2xl p-5">
           <div className="flex items-center gap-2.5 text-rose-400 mb-2">
             <Code2 className="w-5 h-5" />
-            <h3 className="text-sm font-bold">৩. Scoped Storage ও ফোরগ্রাউন্ড সার্ভিস</h3>
+            <h3 className="text-sm font-bold">৩. Media3 ExoPlayer ও Scoped Storage</h3>
           </div>
           <p className="text-xs text-zinc-400 leading-relaxed">
-            অতিরিক্ত পারমিশন ছাড়াই Android 10+ MediaStore Downloads ফোল্ডারে নিরাপদে ফাইল সংরক্ষণ এবং নোটিফিকেশন থেকে Pause/Resume।
+            Android অ্যাপের জন্য ব্যাকগ্রাউন্ড অডিও MediaSession, Share Menu রিসিভার এবং Android 10+ Scoped Storage ডাউনলোড ইঞ্জিন।
           </p>
         </div>
       </div>
 
-      {/* Native Android & Workflow Code Viewer */}
+      {/* Workflow (release.yml / website.yml) & Native Android Code Viewer */}
       <div className="noir-card rounded-2xl overflow-hidden">
         <div className="px-5 py-4 border-b noir-border flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-1 p-1 noir-subcard rounded-lg">
+            <button
+              onClick={() => setActiveCodeTab('release_yml')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                activeCodeTab === 'release_yml'
+                  ? 'bg-rose-600 text-white font-semibold'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              .github/workflows/release.yml
+            </button>
+            <button
+              onClick={() => setActiveCodeTab('website_yml')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                activeCodeTab === 'website_yml'
+                  ? 'bg-rose-600 text-white font-semibold'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              .github/workflows/website.yml
+            </button>
             <button
               onClick={() => setActiveCodeTab('kotlin')}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
@@ -495,7 +602,7 @@ git push -u origin main --tags`;
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
-              NoirNativeMediaEngine.kt (Media3 + Scoped Storage)
+              NoirNativeMediaEngine.kt
             </button>
             <button
               onClick={() => setActiveCodeTab('manifest')}
@@ -505,17 +612,7 @@ git push -u origin main --tags`;
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
-              AndroidManifest.xml (Share & View Intents)
-            </button>
-            <button
-              onClick={() => setActiveCodeTab('workflow')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                activeCodeTab === 'workflow'
-                  ? 'bg-rose-600 text-white font-semibold'
-                  : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              .github/workflows/android-apk-release.yml
+              AndroidManifest.xml
             </button>
           </div>
 

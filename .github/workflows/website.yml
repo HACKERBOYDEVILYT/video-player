@@ -1,0 +1,77 @@
+name: Website CI/CD Build, Test & Deploy (website.yml)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "website-deploy"
+  cancel-in-progress: true
+
+jobs:
+  build-and-test-website:
+    name: Lint, Security Test & Build Website Bundle
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run TypeScript Typecheck & Linting
+        run: npm run lint
+
+      - name: Run SSRF Security & Download Lifecycle Unit Tests
+        run: npm test
+
+      - name: Build Production Website & PWA Assets (Vite + Workbox)
+        run: npm run build
+
+      - name: Add SPA Fallback (404.html) for Static Hosting
+        run: cp dist/index.html dist/404.html
+
+      - name: Upload Production Website Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: noir-website-dist
+          path: dist/
+
+      - name: Configure GitHub Pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages Artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+
+  deploy-website:
+    name: Deploy Website to GitHub Pages
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    needs: build-and-test-website
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

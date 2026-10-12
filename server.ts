@@ -741,12 +741,17 @@ app.get('/api/release/status', (_req: Request, res: Response) => {
     packageId: 'com.noir.videostudio',
     version: 'v2.0.0',
     deployedUrl: process.env.APP_URL || '',
-    workflowPath: '.github/workflows/android-apk-release.yml',
+    workflows: {
+      releaseYaml: '.github/workflows/release.yml',
+      websiteYaml: '.github/workflows/website.yml',
+      androidApkReleaseYaml: '.github/workflows/android-apk-release.yml',
+    },
     capacitorConfigPath: 'capacitor.config.json',
     pwaManifestReady: true,
     apkArtifacts: [
       'NOIR-Video-Studio-debug.apk',
       'NOIR-Video-Studio-release-unsigned.apk',
+      'NOIR-Video-Studio-release.aab',
     ],
     timestamp: new Date().toISOString(),
   });

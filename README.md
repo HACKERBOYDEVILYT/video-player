@@ -9,7 +9,9 @@ Professional Universal Video Player & Authorized Stream Downloader for **Web (Re
 ```text
 /
 ├── .github/workflows/
-│   └── android-apk-release.yml      # Automated CI/CD pipeline for Web build, Tests & Android APK Release
+│   ├── release.yml                  # Automated Android APK, AAB & Production Release workflow
+│   ├── website.yml                  # Automated Website CI/CD, Security Tests & GitHub Pages Deploy
+│   └── android-apk-release.yml      # Companion Android APK workflow
 ├── public/
 │   ├── icon.svg                     # Brand vector icon
 │   ├── pwa-192x192.png              # Android/Desktop PWA icon (192x192)
