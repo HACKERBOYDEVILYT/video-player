@@ -2,9 +2,13 @@ name: Website CI/CD Build, Test & Deploy (website.yml)
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
   pull_request:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
   workflow_dispatch:
 
 permissions:
@@ -13,12 +17,12 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "website-deploy"
-  cancel-in-progress: true
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   build-and-test-website:
-    name: Lint, Security Test & Build Website Bundle
+    name: Lint, Test & Build Website Bundle
     runs-on: ubuntu-latest
 
     steps:
@@ -36,15 +40,15 @@ jobs:
       - name: Run TypeScript Typecheck & Linting
         run: npm run lint
 
-      - name: Run SSRF Security & Download Lifecycle Unit Tests
+      - name: Run Security & Download Lifecycle Unit Tests
         run: npm test
 
-      - name: Build Production Website & PWA Assets (Vite + Workbox)
+      - name: Build Production Website & PWA Assets
         env:
           GITHUB_ACTIONS: 'true'
         run: npm run build
 
-      - name: Add SPA Fallback (404.html) & .nojekyll for GitHub Pages
+      - name: Add SPA Fallback (404.html) & .nojekyll
         run: |
           cp dist/index.html dist/404.html
           touch dist/.nojekyll
@@ -55,11 +59,9 @@ jobs:
           name: noir-website-dist
           path: dist/
 
-      - name: Enable & Configure GitHub Pages Automatically
+      - name: Configure GitHub Pages
         if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - name: Upload GitHub Pages Artifact
         if: github.event_name != 'pull_request'
@@ -67,7 +69,17 @@ jobs:
         with:
           path: './dist'
 
-  deploy-website:
+      # Fallback Deploy via Peaceiris gh-pages branch (works even when GitHub Pages Actions is disabled in repo settings)
+      - name: Deploy to gh-pages branch fallback
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          keep_files: false
+          enable_jekyll: false
+
+  deploy-website-pages:
     name: Deploy Website to GitHub Pages
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     needs: build-and-test-website
@@ -79,4 +91,5 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
+        continue-on-error: true
         uses: actions/deploy-pages@v4
