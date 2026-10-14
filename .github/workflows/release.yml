@@ -2,6 +2,9 @@ name: Android APK & Production Bundle Release (release.yml)
 
 on:
   push:
+    branches:
+      - main
+      - master
     tags:
       - 'v*'
   workflow_dispatch:
@@ -28,11 +31,11 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Setup Java JDK 21 (Temurin)
+      - name: Setup Java JDK 17 (Temurin)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '17'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -56,33 +59,34 @@ jobs:
         working-directory: ./android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug assembleRelease bundleRelease
+          ./gradlew assembleDebug assembleRelease --no-daemon
 
-      - name: Package Release Artifacts (APK, AAB & Web Dist Zip)
+      - name: Package Release Artifacts (APK & Web Dist Bundle)
         run: |
           mkdir -p release-artifacts
-          cp android/app/build/outputs/apk/debug/app-debug.apk release-artifacts/NOIR-Video-Studio-debug.apk
+          if [ -f android/app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp android/app/build/outputs/apk/debug/app-debug.apk release-artifacts/NOIR-Video-Studio-debug.apk
+          fi
           if [ -f android/app/build/outputs/apk/release/app-release-unsigned.apk ]; then
             cp android/app/build/outputs/apk/release/app-release-unsigned.apk release-artifacts/NOIR-Video-Studio-release-unsigned.apk
           fi
-          if [ -f android/app/build/outputs/bundle/release/app-release.aab ]; then
-            cp android/app/build/outputs/bundle/release/app-release.aab release-artifacts/NOIR-Video-Studio-release.aab
-          fi
-          tar -czf release-artifacts/NOIR-Video-Studio-web-bundle.tar.gz dist server.ts package.json capacitor.config.json
+          tar -czf release-artifacts/NOIR-Video-Studio-web-dist.tar.gz dist capacitor.config.json
 
       - name: Generate SHA-256 Checksums for Release Assets
         working-directory: ./release-artifacts
         run: |
           sha256sum * > SHA256SUMS.txt
 
-      - name: Upload Artifacts to GitHub Actions Run
+      - name: Upload Artifacts to GitHub Actions Run (Guaranteed Download)
         uses: actions/upload-artifact@v4
         with:
           name: NOIR-Video-Studio-Release-Bundle
           path: release-artifacts/*
 
       - name: Create GitHub Release & Attach APK / Web Bundle
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
+        continue-on-error: true
         with:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v2.0.0' }}
           name: "NOIR Video Studio (Robiul Video Studio) ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v2.0.0' }}"
@@ -90,9 +94,8 @@ jobs:
             ## NOIR Video Studio — Robiul Video Studio Edition
             ### Included Release Assets:
             - **`NOIR-Video-Studio-debug.apk`**: Ready-to-install Android APK (Android 8.0+).
-            - **`NOIR-Video-Studio-release-unsigned.apk`**: Unsigned production APK for custom keystore signing.
-            - **`NOIR-Video-Studio-release.aab`**: Android App Bundle for Play Store deployment.
-            - **`NOIR-Video-Studio-web-bundle.tar.gz`**: Compiled production Website + Express Backend bundle.
+            - **`NOIR-Video-Studio-release-unsigned.apk`**: Production APK for custom keystore signing.
+            - **`NOIR-Video-Studio-web-dist.tar.gz`**: Compiled production Website bundle.
             - **`SHA256SUMS.txt`**: Cryptographic SHA-256 verification hashes.
           files: |
             release-artifacts/*

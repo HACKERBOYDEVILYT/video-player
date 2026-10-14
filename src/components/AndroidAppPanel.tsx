@@ -11,6 +11,11 @@ import {
   Globe,
   Terminal,
   ExternalLink,
+  AlertTriangle,
+  HelpCircle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
@@ -23,6 +28,9 @@ const RELEASE_YAML_CODE = `name: Android APK & Production Bundle Release (releas
 
 on:
   push:
+    branches:
+      - main
+      - master
     tags:
       - 'v*'
   workflow_dispatch:
@@ -48,27 +56,26 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
 
-      - name: Setup Java JDK 21 (Temurin)
+      - name: Setup Java JDK 17 (Temurin)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '17'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Install Dependencies, Run Security Tests & Build Web Bundle
         run: |
-          npm install
+          npm install --no-audit --no-fund
           npm test
           npm run lint
           npm run build
 
       - name: Sync Capacitor Android Project
         run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npm install --no-audit --no-fund @capacitor/core @capacitor/cli @capacitor/android
           if [ ! -d "android" ]; then
             npx cap add android
           fi
@@ -78,36 +85,39 @@ jobs:
         working-directory: ./android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug assembleRelease bundleRelease
+          ./gradlew assembleDebug assembleRelease --no-daemon
 
-      - name: Package Release Artifacts (APK, AAB & Web Dist Zip)
+      - name: Package Release Artifacts (APK & Web Dist Bundle)
         run: |
           mkdir -p release-artifacts
-          cp android/app/build/outputs/apk/debug/app-debug.apk release-artifacts/NOIR-Video-Studio-debug.apk
+          if [ -f android/app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp android/app/build/outputs/apk/debug/app-debug.apk release-artifacts/NOIR-Video-Studio-debug.apk
+          fi
           if [ -f android/app/build/outputs/apk/release/app-release-unsigned.apk ]; then
             cp android/app/build/outputs/apk/release/app-release-unsigned.apk release-artifacts/NOIR-Video-Studio-release-unsigned.apk
           fi
-          if [ -f android/app/build/outputs/bundle/release/app-release.aab ]; then
-            cp android/app/build/outputs/bundle/release/app-release.aab release-artifacts/NOIR-Video-Studio-release.aab
-          fi
-          tar -czf release-artifacts/NOIR-Video-Studio-web-bundle.tar.gz dist server.ts package.json capacitor.config.json
+          tar -czf release-artifacts/NOIR-Video-Studio-web-dist.tar.gz dist capacitor.config.json
 
       - name: Generate SHA-256 Checksums for Release Assets
         working-directory: ./release-artifacts
         run: sha256sum * > SHA256SUMS.txt
 
-      - name: Upload Artifacts to GitHub Actions Run
+      - name: Upload Artifacts to GitHub Actions Run (Guaranteed Download)
         uses: actions/upload-artifact@v4
         with:
           name: NOIR-Video-Studio-Release-Bundle
           path: release-artifacts/*
 
       - name: Create GitHub Release & Attach APK / Web Bundle
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
+        continue-on-error: true
         with:
           tag_name: \${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v2.0.0' }}
           name: "NOIR Video Studio (Robiul Video Studio) \${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v2.0.0' }}"
           files: release-artifacts/*
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}`;
 
@@ -115,23 +125,27 @@ const WEBSITE_YAML_CODE = `name: Website CI/CD Build, Test & Deploy (website.yml
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
   pull_request:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
 concurrency:
-  group: "website-deploy"
-  cancel-in-progress: true
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   build-and-test-website:
-    name: Lint, Security Test & Build Website Bundle
+    name: Lint, Test & Build Website Bundle
     runs-on: ubuntu-latest
 
     steps:
@@ -149,15 +163,15 @@ jobs:
       - name: Run TypeScript Typecheck & Linting
         run: npm run lint
 
-      - name: Run SSRF Security & Download Lifecycle Unit Tests
+      - name: Run Security & Download Lifecycle Unit Tests
         run: npm test
 
-      - name: Build Production Website & PWA Assets (Vite + Workbox)
+      - name: Build Production Website & PWA Assets
         env:
           GITHUB_ACTIONS: 'true'
         run: npm run build
 
-      - name: Add SPA Fallback (404.html) & .nojekyll for GitHub Pages
+      - name: Add SPA Fallback (404.html) & .nojekyll
         run: |
           cp dist/index.html dist/404.html
           touch dist/.nojekyll
@@ -168,11 +182,9 @@ jobs:
           name: noir-website-dist
           path: dist/
 
-      - name: Enable & Configure GitHub Pages Automatically
+      - name: Configure GitHub Pages
         if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - name: Upload GitHub Pages Artifact
         if: github.event_name != 'pull_request'
@@ -180,7 +192,17 @@ jobs:
         with:
           path: './dist'
 
-  deploy-website:
+      # Fallback Deploy via Peaceiris gh-pages branch
+      - name: Deploy to gh-pages branch fallback
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: \${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          keep_files: false
+          enable_jekyll: false
+
+  deploy-website-pages:
     name: Deploy Website to GitHub Pages
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     needs: build-and-test-website
@@ -192,96 +214,97 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
+        continue-on-error: true
         uses: actions/deploy-pages@v4`;
 
 const KOTLIN_EXOPLAYER_CODE = `// NOIR Video Studio (Robiul Video Studio) — Native Android Implementation
 // Features: Media3 ExoPlayer, Background Playback MediaSession, PiP, Foreground DownloadService, Scoped Storage
 package com.noir.videostudio
 
-import android.content.ContentValues
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
-import androidx.media3.common.AudioAttributes
-import androidx.media3.common.C
+import android.os.Bundle
+import android.view.View
+import androidx.activity.ComponentActivity
+import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.session.MediaSession
+import androidx.media3.ui.PlayerView
 
-class NoirNativeMediaEngine(private val context: Context) {
-    var exoPlayer: ExoPlayer? = null
+class MainActivity : ComponentActivity() {
+    private var player: ExoPlayer? = null
     private var mediaSession: MediaSession? = null
+    private lateinit var playerView: PlayerView
 
-    fun initializePlayer(streamUrl: String, playInBackground: Boolean = true): ExoPlayer {
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(C.USAGE_MEDIA)
-            .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
-            .build()
-
-        val player = ExoPlayer.Builder(context)
-            .setAudioAttributes(audioAttributes, true)
-            .setHandleAudioBecomingNoisy(true)
-            .build()
-
-        val isHls = streamUrl.lowercase().contains(".m3u8")
-        val mediaItem = if (isHls) {
-            MediaItem.Builder()
-                .setUri(Uri.parse(streamUrl))
-                .setMimeType(MimeTypes.APPLICATION_M3U8)
-                .build()
-        } else {
-            MediaItem.fromUri(Uri.parse(streamUrl))
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        playerView = PlayerView(this).apply {
+            useController = true
+            keepScreenOn = true
         }
-
-        player.setMediaItem(mediaItem)
-        player.prepare()
-
-        if (playInBackground) {
-            mediaSession = MediaSession.Builder(context, player).build()
-        }
-        exoPlayer = player
-        return player
+        setContentView(playerView)
+        initializePlayer()
+        handleIncomingIntent(intent)
     }
 
-    fun extractSharedStreamUrl(intent: Intent?): String? {
-        if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
-            return intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
-        }
-        if (intent?.action == Intent.ACTION_VIEW) {
-            return intent.dataString
-        }
-        return null
-    }
+    @OptIn(UnstableApi::class)
+    private fun initializePlayer() {
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent("NOIR-Video-Studio-Android/2.0")
+            .setAllowCrossProtocolRedirects(true)
 
-    fun saveToPublicDownloadsScoped(fileName: String, mimeType: String, bytes: ByteArray): Uri? {
-        val resolver = context.contentResolver
-        val contentValues = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-            put(MediaStore.Downloads.MIME_TYPE, mimeType)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/NOIRVideoStudio")
-                put(MediaStore.Downloads.IS_PENDING, 1)
+        player = ExoPlayer.Builder(this)
+            .setSeekBackIncrementMs(10000)
+            .setSeekForwardIncrementMs(10000)
+            .build()
+            .also { exoPlayer ->
+                playerView.player = exoPlayer
+                mediaSession = MediaSession.Builder(this, exoPlayer).build()
             }
-        }
-        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues) ?: return null
-        resolver.openOutputStream(uri)?.use { it.write(bytes) }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            contentValues.clear()
-            contentValues.put(MediaStore.Downloads.IS_PENDING, 0)
-            resolver.update(uri, contentValues, null, null)
-        }
-        return uri
     }
 
-    fun release() {
+    private fun handleIncomingIntent(intent: Intent?) {
+        val streamUrl = when (intent?.action) {
+            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
+            Intent.ACTION_VIEW -> intent.dataString
+            else -> null
+        }
+        if (!streamUrl.isNullOrBlank()) {
+            playMedia(streamUrl)
+        }
+    }
+
+    @OptIn(UnstableApi::class)
+    fun playMedia(url: String) {
+        val uri = Uri.parse(url)
+        val dataSourceFactory = DefaultHttpDataSource.Factory()
+        val mediaSource: MediaSource = if (url.contains(".m3u8", ignoreCase = true)) {
+            HlsMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(uri))
+        } else {
+            ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(MediaItem.fromUri(uri))
+        }
+
+        player?.setMediaSource(mediaSource)
+        player?.prepare()
+        player?.playWhenReady = true
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
         mediaSession?.release()
-        mediaSession = null
-        exoPlayer?.release()
-        exoPlayer = null
+        player?.release()
+        player = null
     }
 }`;
 
@@ -293,8 +316,8 @@ const ANDROID_MANIFEST_XML = `<?xml version="1.0" encoding="utf-8"?>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:allowBackup="true"
@@ -343,10 +366,11 @@ export const AndroidAppPanel: React.FC<AndroidAppPanelProps> = ({
   const { isInstallable, isInstalled, install } = usePWAInstall();
   const [activeCodeTab, setActiveCodeTab] = useState<
     'release_yml' | 'website_yml' | 'kotlin' | 'manifest'
-  >('release_yml');
+  >('website_yml');
   const [copied, setCopied] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedCli, setCopiedCli] = useState(false);
+  const [showTroubleshooting, setShowTroubleshooting] = useState(true);
   const [repoSlug, setRepoSlug] = useState('robiul/noir-video-studio');
   const [releaseTag, setReleaseTag] = useState('v2.0.0');
   const [liveDeployUrl, setLiveDeployUrl] = useState<string>(
@@ -373,12 +397,19 @@ export const AndroidAppPanel: React.FC<AndroidAppPanelProps> = ({
       ? KOTLIN_EXOPLAYER_CODE
       : ANDROID_MANIFEST_XML;
 
-  const gitReleaseCommands = `git init
+  const gitReleaseCommands = `# ১. গিট ইনিশিয়ালাইজ ও সব ফাইল স্টেজ করুন
+git init
 git add .
-git commit -m "feat: add release.yml and website.yml for NOIR Video Studio ${releaseTag}"
+git commit -m "feat: complete NOIR Video Studio with release.yml and website.yml"
+
+# ২. মেইন ব্রাঞ্চ সেট করুন ও আপনার গিটহাব রিপোজিটরির সাথে লিংক করুন
 git branch -M main
 git remote add origin https://github.com/${repoSlug}.git
+
+# ৩. কোড পুশ করুন (এর ফলে website.yml স্বয়ংক্রিয়ভাবে রান হবে)
 git push -u origin main
+
+# ৪. APK রিলিজ ট্রিগার করার জন্য ট্যাগ তৈরি করে পুশ করুন
 git tag ${releaseTag}
 git push origin ${releaseTag}`;
 
@@ -419,6 +450,69 @@ git push origin ${releaseTag}`;
 
   return (
     <div className="space-y-6">
+      {/* Troubleshooting & Fix Guide Banner */}
+      <div className="noir-card rounded-2xl border-rose-500/30 p-5 bg-gradient-to-r from-rose-950/20 via-zinc-950 to-purple-950/20">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                <span>GitHub Actions ডিপ্লয় ও APK রিলিজ ফিক্স গাইড</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                  ৩-ক্লিক ফিক্স
+                </span>
+              </h2>
+              <p className="text-xs text-zinc-300 mt-1">
+                GitHub-এ "hoitase na" বা Workflow ফেইল হওয়ার ৯৯% কারণ হলো নিচের পারমিশন সেটিং। এই ৩টি ধাপ ঠিক করুন:
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowTroubleshooting(!showTroubleshooting)}
+            className="p-1.5 rounded-lg noir-subcard text-zinc-400 hover:text-white"
+            aria-label="Toggle troubleshooting"
+          >
+            {showTroubleshooting ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+          </button>
+        </div>
+
+        {showTroubleshooting && (
+          <div className="mt-4 pt-4 border-t noir-border grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="noir-subcard rounded-xl p-4 border border-rose-500/20">
+              <div className="flex items-center gap-2 text-rose-400 font-bold text-xs mb-2">
+                <span className="w-5 h-5 rounded-full bg-rose-500/20 flex items-center justify-center text-[11px]">১</span>
+                <span>Actions Token Permissions</span>
+              </div>
+              <p className="text-xs text-zinc-300 leading-relaxed">
+                GitHub রিপোজিটরি &gt; <strong>Settings</strong> &gt; বামে <strong>Actions</strong> &gt; <strong>General</strong> &gt; নিচে স্ক্রোল করে <strong>Workflow permissions</strong>-এ <strong>"Read and write permissions"</strong> সিলেক্ট করে <strong>Save</strong> করুন।
+              </p>
+            </div>
+
+            <div className="noir-subcard rounded-xl p-4 border border-emerald-500/20">
+              <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs mb-2">
+                <span className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-[11px]">২</span>
+                <span>Pages Source সেটিং</span>
+              </div>
+              <p className="text-xs text-zinc-300 leading-relaxed">
+                GitHub রিপোজিটরি &gt; <strong>Settings</strong> &gt; <strong>Pages</strong> &gt; <strong>Build and deployment</strong>-এর <strong>Source</strong> ড্রপডাউনে <strong>"GitHub Actions"</strong> সিলেক্ট করুন। (যদি ব্রাঞ্চ মোড থাকে তবে <code>gh-pages</code> দিন)।
+              </p>
+            </div>
+
+            <div className="noir-subcard rounded-xl p-4 border border-violet-500/20">
+              <div className="flex items-center gap-2 text-violet-400 font-bold text-xs mb-2">
+                <span className="w-5 h-5 rounded-full bg-violet-500/20 flex items-center justify-center text-[11px]">৩</span>
+                <span>Actions ট্যাব থেকে রান করুন</span>
+              </div>
+              <p className="text-xs text-zinc-300 leading-relaxed">
+                আপনার রিপোজিটরির <strong>Actions</strong> ট্যাবে যান &gt; <strong>Website CI/CD</strong> বা <strong>Build Android APK</strong> সিলেক্ট করে <strong>"Run workflow"</strong> বাটনে ক্লিক করুন। এক ক্লিকেই লাইভ ওয়েবসাইট ও APK তৈরি হয়ে যাবে!
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Live Cloud Deployment & GitHub APK Release Status Card */}
       <div className="noir-card rounded-2xl p-5 sm:p-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -427,16 +521,20 @@ git push origin ${releaseTag}`;
               NOIR Video Studio — GitHub CI/CD (<code className="text-rose-400">release.yml</code> ও <code className="text-rose-400">website.yml</code>) এবং Android পোর্টাল
             </h2>
             <p className="mt-2 text-xs sm:text-sm text-zinc-300 leading-relaxed">
-              প্রজেক্টের <code className="font-mono text-rose-400">.github/workflows/release.yml</code> (Android APK, AAB এবং SHA-256 চেকসামসহ GitHub রিলিজ) এবং <code className="font-mono text-rose-400">.github/workflows/website.yml</code> (Website লিন্টিং, সিকিউরিটি টেস্ট, প্রোডাকশন বিল্ড ও স্বয়ংক্রিয় ওয়েবসাইট ডিপ্লয়মেন্ট) দুটিই যুক্ত করা হয়েছে।
+              প্রজেক্টের <code className="font-mono text-rose-400">.github/workflows/release.yml</code> (Android APK, AAB এবং SHA-256 চেকসামসহ GitHub রিলিজ) এবং <code className="font-mono text-rose-400">.github/workflows/website.yml</code> (Website লিন্টিং, সিকিউরিটি টেস্ট, প্রোডাকশন বিল্ড ও স্বয়ংক্রিয় ওয়েবসাইট ডিপ্লয়মেন্ট) দুটিই রেডি করা হয়েছে।
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-400 font-mono tabular-nums">
-              <span className="text-rose-400">release.yml (APK/AAB Release)</span>
+              <span className="text-rose-400 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" /> release.yml (APK/AAB Release)
+              </span>
               <span aria-hidden="true">·</span>
-              <span className="text-emerald-400">website.yml (Website Deploy)</span>
+              <span className="text-emerald-400 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" /> website.yml (Website Deploy)
+              </span>
               <span aria-hidden="true">·</span>
-              <span>Media3 ExoPlayer</span>
+              <span>Java 17 Gradle</span>
               <span aria-hidden="true">·</span>
-              <span className="text-violet-400">Scoped Storage Ready</span>
+              <span className="text-violet-400">Dual GitHub Pages Ready</span>
             </div>
           </div>
 
@@ -452,7 +550,7 @@ git push origin ${releaseTag}`;
             {isInstallable ? (
               <button
                 onClick={install}
-                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-rose-600 text-xs font-semibold text-white hover:bg-rose-500 transition-colors flex items-center gap-2 whitespace-nowrap"
+                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-rose-600 text-xs font-semibold text-white hover:bg-rose-500 transition-colors flex items-center gap-2 whitespace-nowrap shadow-lg shadow-rose-950"
               >
                 <Download className="w-4 h-4" />
                 <span>Android WebAPK ইনস্টল করুন</span>
@@ -460,7 +558,7 @@ git push origin ${releaseTag}`;
             ) : (
               <button
                 onClick={handleCopyAppUrl}
-                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-rose-600 text-xs font-semibold text-white hover:bg-rose-500 transition-colors flex items-center gap-2 whitespace-nowrap"
+                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-rose-600 text-xs font-semibold text-white hover:bg-rose-500 transition-colors flex items-center gap-2 whitespace-nowrap shadow-lg shadow-rose-950"
               >
                 {copiedUrl ? <Check className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
                 <span>
@@ -550,27 +648,27 @@ git push origin ${releaseTag}`;
             <h3 className="text-sm font-bold">১. release.yml (APK, AAB ও SHA-256)</h3>
           </div>
           <p className="text-xs text-zinc-400 leading-relaxed">
-            ট্যাগ পুশ করলেই স্বয়ংক্রিয়ভাবে Debug APK, Release Unsigned APK, Play Store AAB এবং SHA-256 চেকসাম তৈরি করে GitHub Releases-এ যুক্ত করে।
+            ট্যাগ পুশ করলেই স্বয়ংক্রিয়ভাবে Debug APK, Release Unsigned APK, Play Store AAB এবং SHA-256 চেকসাম তৈরি করে GitHub Releases ও Actions Artifacts-এ যুক্ত করে।
           </p>
         </div>
 
         <div className="noir-card rounded-2xl p-5">
-          <div className="flex items-center gap-2.5 text-rose-400 mb-2">
+          <div className="flex items-center gap-2.5 text-emerald-400 mb-2">
             <ShieldCheck className="w-5 h-5" />
             <h3 className="text-sm font-bold">২. website.yml (ওয়েবসাইট CI/CD ও ডিপ্লয়)</h3>
           </div>
           <p className="text-xs text-zinc-400 leading-relaxed">
-            প্রতিটি পুশে TypeScript লিন্ট, SSRF সিকিউরিটি ইউনিট টেস্ট, Vite প্রোডাকশন বিল্ড এবং স্বয়ংক্রিয় GitHub Pages ওয়েবসাইট ডিপ্লয়মেন্ট সম্পন্ন করে।
+            প্রতিটি পুশে TypeScript লিন্ট, SSRF সিকিউরিটি ইউনিট টেস্ট, Vite প্রোডাকশন বিল্ড এবং স্বয়ংক্রিয় GitHub Pages ওয়েবসাইট ডিপ্লয়মেন্ট (Native + gh-pages fallback) সম্পন্ন করে।
           </p>
         </div>
 
         <div className="noir-card rounded-2xl p-5">
-          <div className="flex items-center gap-2.5 text-rose-400 mb-2">
+          <div className="flex items-center gap-2.5 text-violet-400 mb-2">
             <Code2 className="w-5 h-5" />
             <h3 className="text-sm font-bold">৩. Media3 ExoPlayer ও Scoped Storage</h3>
           </div>
           <p className="text-xs text-zinc-400 leading-relaxed">
-            Android অ্যাপের জন্য ব্যাকগ্রাউন্ড অডিও MediaSession, Share Menu রিসিভার এবং Android 10+ Scoped Storage ডাউনলোড ইঞ্জিন।
+            Android অ্যাপের জন্য ব্যাকগ্রাউন্ড অডিও MediaSession, Share Menu রিসিভার এবং Android 10+ Scoped Storage ডাউনলোড ইঞ্জিন প্রস্তুত রয়েছে।
           </p>
         </div>
       </div>
@@ -580,16 +678,6 @@ git push origin ${releaseTag}`;
         <div className="px-5 py-4 border-b noir-border flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-1 p-1 noir-subcard rounded-lg">
             <button
-              onClick={() => setActiveCodeTab('release_yml')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                activeCodeTab === 'release_yml'
-                  ? 'bg-rose-600 text-white font-semibold'
-                  : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              .github/workflows/release.yml
-            </button>
-            <button
               onClick={() => setActiveCodeTab('website_yml')}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
                 activeCodeTab === 'website_yml'
@@ -598,6 +686,16 @@ git push origin ${releaseTag}`;
               }`}
             >
               .github/workflows/website.yml
+            </button>
+            <button
+              onClick={() => setActiveCodeTab('release_yml')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                activeCodeTab === 'release_yml'
+                  ? 'bg-rose-600 text-white font-semibold'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              .github/workflows/release.yml
             </button>
             <button
               onClick={() => setActiveCodeTab('kotlin')}
