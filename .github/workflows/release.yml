@@ -84,12 +84,11 @@ jobs:
           path: release-artifacts/*
 
       - name: Create GitHub Release & Attach APK / Web Bundle
-        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         continue-on-error: true
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v2.0.0' }}
-          name: "NOIR Video Studio (Robiul Video Studio) ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag || 'v2.0.0' }}"
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag || 'v2.0.0' }}
+          name: "NOIR Video Studio (Robiul Video Studio) ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag || 'v2.0.0' }}"
           body: |
             ## NOIR Video Studio — Robiul Video Studio Edition
             ### Included Release Assets:

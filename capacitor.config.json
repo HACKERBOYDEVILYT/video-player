@@ -1,6 +1,6 @@
 {
-  "appId": "com.cinestream.universal",
-  "appName": "CineStream",
+  "appId": "com.noir.videostudio",
+  "appName": "NOIR Video Studio",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {
