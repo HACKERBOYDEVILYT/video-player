@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="bn" class="dark">
+<html lang="bn" class="dark" style="background-color: #020617; color: #f8fafc;">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CineStream — Universal Video Player & Downloader</title>
+    <title>NOIR Video Studio — Universal Video Player & Downloader</title>
     <meta name="description" content="Premium dark cinematic universal video player and authorized stream downloader supporting direct MP4/WebM and adaptive HLS/M3U8 streams across Web and Android." />
-    <meta property="og:title" content="CineStream — Universal Video Player & Downloader" />
+    <meta property="og:title" content="NOIR Video Studio — Universal Video Player & Downloader" />
     <meta property="og:description" content="Premium dark cinematic universal video player and authorized stream downloader supporting direct MP4/WebM and adaptive HLS/M3U8 streams across Web and Android." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -13,16 +13,46 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="CineStream" />
+    <meta name="apple-mobile-web-app-title" content="NOIR Studio" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@600;700&display=swap" rel="stylesheet" />
+    <style>
+      html, body {
+        background-color: #020617 !important;
+        color: #f8fafc !important;
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+      }
+      @keyframes noirPulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.6; transform: scale(0.96); }
+      }
+      @keyframes noirSpin {
+        to { transform: rotate(360deg); }
+      }
+      .noir-preloader-spin {
+        animation: noirSpin 0.9s linear infinite;
+      }
+      .noir-preloader-pulse {
+        animation: noirPulse 2s ease-in-out infinite;
+      }
+    </style>
   </head>
-  <body class="bg-[#020617] text-slate-100 antialiased selection:bg-sky-400/20 selection:text-sky-400">
-    <div id="root"></div>
+  <body class="bg-[#020617] text-slate-100 antialiased selection:bg-rose-500/20 selection:text-rose-400">
+    <div id="root">
+      <div style="min-height: 100vh; background-color: #020617; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <div style="position: relative; width: 64px; height: 64px; margin-bottom: 20px;">
+          <div style="width: 64px; height: 64px; border: 3px solid rgba(225, 29, 72, 0.15); border-top-color: #e11d48; border-radius: 50%;" class="noir-preloader-spin"></div>
+          <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; color: #e11d48;" class="noir-preloader-pulse">▶</div>
+        </div>
+        <div style="font-weight: 800; font-size: 20px; letter-spacing: 0.08em; text-transform: uppercase; color: #ffffff;">NOIR VIDEO STUDIO</div>
+        <div style="font-size: 13px; color: #94a3b8; margin-top: 8px;">CineStream Universal Engine লোড হচ্ছে...</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
