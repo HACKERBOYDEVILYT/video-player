@@ -27,7 +27,12 @@ class RootErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState
   }
 
   handleReset = () => {
-    localStorage.clear();
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch {
+      // ignore
+    }
     window.location.reload();
   };
 
@@ -51,13 +56,13 @@ class RootErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState
             <div className="flex gap-3 justify-center">
               <button
                 onClick={() => window.location.reload()}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold transition-colors"
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
               >
                 রিলোড করুন
               </button>
               <button
                 onClick={this.handleReset}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-semibold transition-colors"
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
               >
                 ক্যাশে রিসেট করুন
               </button>
@@ -73,9 +78,25 @@ class RootErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState
 
 const rootElement = document.getElementById('root');
 if (rootElement) {
-  createRoot(rootElement).render(
-    <RootErrorBoundary>
-      <App />
-    </RootErrorBoundary>
-  );
+  try {
+    const root = createRoot(rootElement);
+    root.render(
+      <RootErrorBoundary>
+        <App />
+      </RootErrorBoundary>
+    );
+  } catch (err) {
+    console.error('Root mount failed:', err);
+    rootElement.innerHTML = `
+      <div style="min-height: 100vh; background-color: #020617; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 24px; text-align: center;">
+        <div style="font-weight: 800; font-size: 22px; color: #f43f5e; margin-bottom: 8px;">NOIR VIDEO STUDIO</div>
+        <div style="font-size: 14px; color: #94a3b8; max-width: 420px; margin-bottom: 20px;">
+          মাউন্ট করার সময় সমস্যা হয়েছে। অনুগ্রহ করে নিচের বাটনে ক্লিক করে রিলোড দিন।
+        </div>
+        <button onclick="localStorage.clear(); window.location.reload();" style="padding: 10px 24px; background-color: #e11d48; color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer;">
+          ক্যাশে রিসেট ও রিলোড
+        </button>
+      </div>
+    `;
+  }
 }

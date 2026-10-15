@@ -764,10 +764,15 @@ async function startServer() {
     });
     app.use(vite.middlewares);
 
-    // Fallback for SPA routes in dev mode
+    // Fallback for SPA routes in dev mode (only HTML navigation, skip static/asset files)
     app.use('*', async (req: Request, res: Response, next: NextFunction) => {
       if (req.method !== 'GET') return next();
       if (req.path.startsWith('/api/')) return next();
+
+      const hasExt = path.extname(req.path) !== '';
+      const acceptsHtml = req.headers.accept?.includes('text/html');
+      if (hasExt && !acceptsHtml) return next();
+
       const url = req.originalUrl;
       try {
         const indexPath = path.resolve(process.cwd(), 'index.html');
