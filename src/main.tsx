@@ -85,6 +85,7 @@ if (rootElement) {
         <App />
       </RootErrorBoundary>
     );
+    (window as unknown as { __NOIR_APP_MOUNTED__?: boolean }).__NOIR_APP_MOUNTED__ = true;
   } catch (err) {
     console.error('Root mount failed:', err);
     rootElement.innerHTML = `

@@ -129,7 +129,11 @@ export default function App() {
   const [favoriteUrls, setFavoriteUrls] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.FAVORITES);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed: string[] = JSON.parse(saved);
+        const filtered = parsed.filter((u) => !u.includes('gtv-videos-bucket'));
+        if (filtered.length > 0) return filtered;
+      }
     } catch {
       // ignore
     }
@@ -139,7 +143,11 @@ export default function App() {
   const [history, setHistory] = useState<HistoryEntry[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.HISTORY);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed: HistoryEntry[] = JSON.parse(saved);
+        const filtered = parsed.filter((h) => !h.url.includes('gtv-videos-bucket'));
+        if (filtered.length > 0) return filtered;
+      }
     } catch {
       // ignore
     }
@@ -150,8 +158,8 @@ export default function App() {
         url: PRESET_VIDEOS[0].url,
         format: PRESET_VIDEOS[0].format,
         thumbnail: PRESET_VIDEOS[0].thumbnail,
-        lastPositionSec: 48,
-        durationSec: 734,
+        lastPositionSec: 0,
+        durationSec: 52,
         watchedAt: new Date(Date.now() - 1800 * 1000).toISOString(),
         license: PRESET_VIDEOS[0].license,
       },
@@ -161,7 +169,15 @@ export default function App() {
   const [playlists, setPlaylists] = useState<Playlist[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.PLAYLISTS);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed: Playlist[] = JSON.parse(saved);
+        // Replace master playlist items with updated presets
+        return parsed.map((pl) =>
+          pl.id === 'pl-noir-master'
+            ? { ...pl, items: PRESET_VIDEOS }
+            : { ...pl, items: pl.items.filter((item) => !item.url.includes('gtv-videos-bucket')) }
+        );
+      }
     } catch {
       // ignore
     }

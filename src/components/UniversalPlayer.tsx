@@ -108,7 +108,7 @@ export const UniversalPlayer: React.FC<UniversalPlayerProps> = ({
   const touchStartRef = useRef<{ x: number; y: number; side: 'left' | 'right' } | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isBuffering, setIsBuffering] = useState(true);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [bufferedEnd, setBufferedEnd] = useState(0);
@@ -149,6 +149,15 @@ export const UniversalPlayer: React.FC<UniversalPlayerProps> = ({
     }
   }, []);
 
+  // Buffering watchdog: auto-clear stuck buffering after 3.5s
+  useEffect(() => {
+    if (!isBuffering) return;
+    const timer = setTimeout(() => {
+      setIsBuffering(false);
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, [isBuffering]);
+
   const effectiveStreamUrl = useCallback(() => {
     if (video.url.startsWith('blob:') || video.url.startsWith('/api/')) return video.url;
     if (useBackendProxy && video.format !== 'HLS') {
@@ -182,7 +191,7 @@ export const UniversalPlayer: React.FC<UniversalPlayerProps> = ({
     }
 
     setPlayerError(null);
-    setIsBuffering(true);
+    setIsBuffering(false);
     setIsPlaying(false);
 
     const streamUrl = effectiveStreamUrl();
@@ -595,17 +604,21 @@ export const UniversalPlayer: React.FC<UniversalPlayerProps> = ({
         <video
           ref={videoRef}
           poster={video.thumbnail}
-          crossOrigin="anonymous"
+          preload="metadata"
           playsInline
           loop={isLooping}
           style={{ filter: `brightness(${brightness}%)` }}
           onClick={handleVideoSurfaceClick}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
-          onPlay={() => setIsPlaying(true)}
+          onPlay={() => {
+            setIsPlaying(true);
+            setIsBuffering(false);
+          }}
           onPause={() => setIsPlaying(false)}
           onWaiting={() => setIsBuffering(true)}
           onCanPlay={() => setIsBuffering(false)}
+          onLoadedData={() => setIsBuffering(false)}
           onLoadedMetadata={(e) => {
             const vid = e.currentTarget;
             setDuration(vid.duration || 0);
@@ -701,21 +714,25 @@ export const UniversalPlayer: React.FC<UniversalPlayerProps> = ({
           )}
         </div>
 
-        {/* Center Play / Buffering State */}
-        {!playerError && isBuffering && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35">
-            <div className="w-12 h-12 rounded-full border-2 border-rose-500 border-t-transparent animate-spin" />
-          </div>
-        )}
-
-        {!playerError && !isPlaying && !isBuffering && (
+        {/* Center Play Button & Active Buffering State */}
+        {!playerError && !isPlaying && (
           <button
             onClick={togglePlay}
             aria-label="Play Video"
-            className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-[#13111C]/90 border border-rose-500/60 text-rose-500 flex items-center justify-center hover:scale-105 transition-transform duration-150 shadow-2xl"
+            className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-[#13111C]/90 border border-rose-500/60 text-rose-500 flex items-center justify-center hover:scale-105 transition-transform duration-150 shadow-2xl z-20 cursor-pointer"
           >
-            <Play className="w-7 h-7 fill-current ml-0.5" />
+            {isBuffering ? (
+              <div className="w-6 h-6 rounded-full border-2 border-rose-500 border-t-transparent animate-spin" />
+            ) : (
+              <Play className="w-7 h-7 fill-current ml-0.5" />
+            )}
           </button>
+        )}
+
+        {!playerError && isPlaying && isBuffering && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 z-20">
+            <div className="w-12 h-12 rounded-full border-2 border-rose-500 border-t-transparent animate-spin" />
+          </div>
         )}
 
         {/* Error Recovery Overlay */}
