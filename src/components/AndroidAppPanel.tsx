@@ -479,7 +479,7 @@ git push origin ${releaseTag}`;
         </div>
 
         {showTroubleshooting && (
-          <div className="mt-4 pt-4 border-t noir-border grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="mt-4 pt-4 border-t noir-border grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="noir-subcard rounded-xl p-4 border border-rose-500/20">
               <div className="flex items-center gap-2 text-rose-400 font-bold text-xs mb-2">
                 <span className="w-5 h-5 rounded-full bg-rose-500/20 flex items-center justify-center text-[11px]">১</span>
@@ -490,13 +490,13 @@ git push origin ${releaseTag}`;
               </p>
             </div>
 
-            <div className="noir-subcard rounded-xl p-4 border border-emerald-500/20">
-              <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs mb-2">
-                <span className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-[11px]">২</span>
-                <span>Pages Source সেটিং</span>
+            <div className="noir-subcard rounded-xl p-4 border border-amber-500/20">
+              <div className="flex items-center gap-2 text-amber-400 font-bold text-xs mb-2">
+                <span className="w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center text-[11px]">২</span>
+                <span>Actions Artifact থেকে সরাসরি APK</span>
               </div>
               <p className="text-xs text-zinc-300 leading-relaxed">
-                GitHub রিপোজিটরি &gt; <strong>Settings</strong> &gt; <strong>Pages</strong> &gt; <strong>Build and deployment</strong>-এর <strong>Source</strong> ড্রপডাউনে <strong>"GitHub Actions"</strong> সিলেক্ট করুন। (যদি ব্রাঞ্চ মোড থাকে তবে <code>gh-pages</code> দিন)।
+                GitHub <strong>Actions</strong> ট্যাব &gt; সর্বশেষ <strong>Build Android APK</strong> রানে ক্লিক করুন &gt; নিচে <strong>Artifacts</strong> সেকশনে <strong>NOIR-Video-Studio-APK</strong> জিপ ফাইলে ক্লিক করলেই তৈরি হওয়া APK সাথে সাথে ডাউনলোড হয়ে যাবে!
               </p>
             </div>
 
@@ -506,7 +506,17 @@ git push origin ${releaseTag}`;
                 <span>Actions ট্যাব থেকে রান করুন</span>
               </div>
               <p className="text-xs text-zinc-300 leading-relaxed">
-                আপনার রিপোজিটরির <strong>Actions</strong> ট্যাবে যান &gt; <strong>Website CI/CD</strong> বা <strong>Build Android APK</strong> সিলেক্ট করে <strong>"Run workflow"</strong> বাটনে ক্লিক করুন। এক ক্লিকেই লাইভ ওয়েবসাইট ও APK তৈরি হয়ে যাবে!
+                আপনার রিপোজিটরির <strong>Actions</strong> ট্যাবে যান &gt; <strong>Build Android APK & Create GitHub Release</strong> সিলেক্ট করে ডানপাশের <strong>"Run workflow"</strong> বাটনে ক্লিক করলেই স্বয়ংক্রিয়ভাবে APK বিল্ড শুরু হবে।
+              </p>
+            </div>
+
+            <div className="noir-subcard rounded-xl p-4 border border-emerald-500/20">
+              <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs mb-2">
+                <span className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-[11px]">৪</span>
+                <span>Pages Source সেটিং</span>
+              </div>
+              <p className="text-xs text-zinc-300 leading-relaxed">
+                GitHub রিপোজিটরি &gt; <strong>Settings</strong> &gt; <strong>Pages</strong> &gt; <strong>Build and deployment</strong>-এর <strong>Source</strong> ড্রপডাউনে <strong>"GitHub Actions"</strong> সিলেক্ট করুন।
               </p>
             </div>
           </div>
@@ -539,12 +549,31 @@ git push origin ${releaseTag}`;
           </div>
 
           <div className="flex flex-wrap items-center gap-3 shrink-0">
+            <a
+              href="/api/release/download-apk"
+              download="NOIR-Video-Studio-Android-Release-Package.zip"
+              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 via-rose-500 to-amber-500 text-xs font-bold text-white hover:opacity-95 transition-all flex items-center gap-2 whitespace-nowrap shadow-lg shadow-rose-950/70"
+            >
+              <Download className="w-4 h-4" />
+              <span>সরাসরি APK / অ্যান্ড্রয়েড প্যাকেজ ডাউনলোড</span>
+            </a>
+
+            <a
+              href={`https://github.com/${repoSlug}/releases`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="min-h-[44px] px-4 py-2.5 rounded-xl bg-purple-950/40 border border-purple-500/40 text-xs font-semibold text-purple-200 hover:bg-purple-900/50 transition-colors flex items-center gap-2 whitespace-nowrap"
+            >
+              <ExternalLink className="w-4 h-4 text-purple-400" />
+              <span>GitHub Releases পেজ</span>
+            </a>
+
             <button
               onClick={onToggleMobilePreview}
               className="min-h-[44px] px-4 py-2.5 rounded-xl noir-subcard text-xs font-semibold hover:border-rose-500/50 transition-colors flex items-center gap-2 whitespace-nowrap"
             >
               <Smartphone className="w-4 h-4 text-rose-400" />
-              <span>{mobilePreviewMode ? 'ডেস্কটপ ভিউতে ফিরুন' : 'Android Mobile প্রিভিউ'}</span>
+              <span>{mobilePreviewMode ? 'ডেস্কটপ ভিউ' : 'Mobile প্রিভিউ'}</span>
             </button>
 
             {isInstallable ? (
@@ -553,20 +582,20 @@ git push origin ${releaseTag}`;
                 className="min-h-[44px] px-4 py-2.5 rounded-xl bg-rose-600 text-xs font-semibold text-white hover:bg-rose-500 transition-colors flex items-center gap-2 whitespace-nowrap shadow-lg shadow-rose-950"
               >
                 <Download className="w-4 h-4" />
-                <span>Android WebAPK ইনস্টল করুন</span>
+                <span>WebAPK ইনস্টল</span>
               </button>
             ) : (
               <button
                 onClick={handleCopyAppUrl}
-                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-rose-600 text-xs font-semibold text-white hover:bg-rose-500 transition-colors flex items-center gap-2 whitespace-nowrap shadow-lg shadow-rose-950"
+                className="min-h-[44px] px-4 py-2.5 rounded-xl noir-subcard text-xs font-semibold text-zinc-300 hover:text-white transition-colors flex items-center gap-2 whitespace-nowrap"
               >
-                {copiedUrl ? <Check className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
+                {copiedUrl ? <Check className="w-4 h-4 text-rose-400" /> : <Globe className="w-4 h-4" />}
                 <span>
                   {copiedUrl
-                    ? 'ডিপ্লয়েড URL কপি হয়েছে'
+                    ? 'URL কপি হয়েছে'
                     : isInstalled
-                    ? 'অ্যাপ ইনস্টল করা আছে'
-                    : 'লাইভ ডিপ্লয়েড লিংক কপি করুন'}
+                    ? 'অ্যাপ ইনস্টল করা'
+                    : 'লাইভ লিংক কপি'}
                 </span>
               </button>
             )}

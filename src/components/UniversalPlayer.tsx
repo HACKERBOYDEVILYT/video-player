@@ -715,17 +715,14 @@ export const UniversalPlayer: React.FC<UniversalPlayerProps> = ({
         </div>
 
         {/* Center Play Button & Active Buffering State */}
+        {/* Center Play Button */}
         {!playerError && !isPlaying && (
           <button
             onClick={togglePlay}
             aria-label="Play Video"
             className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-[#13111C]/90 border border-rose-500/60 text-rose-500 flex items-center justify-center hover:scale-105 transition-transform duration-150 shadow-2xl z-20 cursor-pointer"
           >
-            {isBuffering ? (
-              <div className="w-6 h-6 rounded-full border-2 border-rose-500 border-t-transparent animate-spin" />
-            ) : (
-              <Play className="w-7 h-7 fill-current ml-0.5" />
-            )}
+            <Play className="w-7 h-7 fill-current ml-0.5" />
           </button>
         )}
 

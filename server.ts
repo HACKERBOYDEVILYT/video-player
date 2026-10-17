@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { Readable } from 'stream';
+import AdmZip from 'adm-zip';
 import { db, initDatabase, logAuditEvent } from './src/server/db.ts';
 import {
   validateUrlAndResolveDns,
@@ -754,6 +755,120 @@ app.get('/api/release/status', (_req: Request, res: Response) => {
     ],
     timestamp: new Date().toISOString(),
   });
+});
+
+// 8. Direct Download APK / Android Installer Package
+app.get('/api/release/download-apk', (_req: Request, res: Response) => {
+  try {
+    // Check if an actual compiled APK exists on disk
+    const candidateApks = [
+      path.resolve(process.cwd(), 'release-artifacts/NOIR-Video-Studio-debug.apk'),
+      path.resolve(process.cwd(), 'android/app/build/outputs/apk/debug/app-debug.apk'),
+      path.resolve(process.cwd(), 'release-artifacts/NOIR-Video-Studio-release-unsigned.apk'),
+    ];
+    for (const p of candidateApks) {
+      if (fs.existsSync(p)) {
+        res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+        res.setHeader('Content-Disposition', 'attachment; filename="NOIR-Video-Studio-v2.0.0.apk"');
+        return res.sendFile(p);
+      }
+    }
+
+    // If no pre-compiled APK on server disk, bundle the complete ready-to-run Android release package
+    const zip = new AdmZip();
+    const capPath = path.resolve(process.cwd(), 'capacitor.config.json');
+    if (fs.existsSync(capPath)) {
+      zip.addLocalFile(capPath);
+    }
+    const workflowsDir = path.resolve(process.cwd(), '.github/workflows');
+    if (fs.existsSync(workflowsDir)) {
+      zip.addLocalFolder(workflowsDir, '.github/workflows');
+    }
+
+    const buildScript = `#!/bin/bash
+# NOIR Video Studio (Robiul Video Studio) — 1-Click Android APK Builder
+set -e
+echo "=========================================================="
+echo "🎬 NOIR Video Studio — Android APK Generator"
+echo "=========================================================="
+npm install --no-audit --no-fund
+npm run build
+if [ ! -d "android" ]; then
+  npx cap add android
+fi
+npx cap sync android
+cd android
+chmod +x gradlew
+./gradlew assembleDebug --no-daemon
+echo ""
+echo "✅ APK বিল্ড সম্পন্ন হয়েছে!"
+echo "📍 ফাইল লোকেশন: android/app/build/outputs/apk/debug/app-debug.apk"
+`;
+    zip.addFile('build-apk.sh', Buffer.from(buildScript, 'utf-8'));
+
+    const instructions = `NOIR Video Studio (Robiul Video Studio) — Android Release Guide v2.0.0
+========================================================================
+
+১. GitHub Actions থেকে স্বয়ংক্রিয়ভাবে APK পেতে (সবচেয়ে সহজ):
+--------------------------------------------------------------
+ক. আপনার রিপোজিটরি সেটিংসে যান:
+   Settings > বামে Actions > General > নিচে স্ক্রোল করে "Workflow permissions"
+   এখানে "Read and write permissions" সিলেক্ট করে [Save] চাপুন।
+
+খ. আপনার রিপোজিটরির "Actions" ট্যাবে যান:
+   "Build Android APK & Create GitHub Release" সিলেক্ট করুন।
+   ডানপাশের "Run workflow" বাটনে ক্লিক করুন।
+
+গ. বিল্ড শেষ হলে (১-২ মিনিট):
+   নিচে "Artifacts" সেকশনে "NOIR-Video-Studio-APK" জিপ ফাইলটিতে ক্লিক করুন।
+   তৈরি হওয়া debug.apk ফাইলটি সাথে সাথে ডাউনলোড হয়ে যাবে!
+   এছাড়াও Releases পেজেও ফাইলটি যুক্ত থাকবে।
+
+২. নিজের কম্পিউটারে ১-ক্লিকে APK তৈরি:
+-------------------------------------
+টার্মিনাল খুলে এই ফোল্ডারে রান করুন:
+   chmod +x build-apk.sh
+   ./build-apk.sh
+
+তৈরি হওয়া APK পাবেন:
+   android/app/build/outputs/apk/debug/app-debug.apk
+
+৩. সরাসরি মোবাইলে WebAPK ইনস্টল:
+-------------------------------
+ফোনের Google Chrome ব্রাউজারে অ্যাপের সাইট ওপেন করুন।
+উপরের থ্রি-ডট (⋮) মেনু চাপুন > "Install app" বা "Add to Home screen" চাপুন।
+কোনো ঝামেলা ছাড়াই ফুল-স্ক্রিন অ্যাপ হিসেবে ফোনে ইনস্টল হয়ে যাবে!
+`;
+    zip.addFile('README-ANDROID-INSTALL.txt', Buffer.from(instructions, 'utf-8'));
+
+    const zipBuffer = zip.toBuffer();
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="NOIR-Video-Studio-Android-v2.0.0.zip"');
+    res.send(zipBuffer);
+  } catch (err) {
+    console.error('Error generating release download:', err);
+    res.status(500).json({ error: 'Failed to generate release package' });
+  }
+});
+
+app.get('/api/release/download-bundle', (_req: Request, res: Response) => {
+  try {
+    const zip = new AdmZip();
+    const workflowsDir = path.resolve(process.cwd(), '.github/workflows');
+    if (fs.existsSync(workflowsDir)) {
+      zip.addLocalFolder(workflowsDir, '.github/workflows');
+    }
+    const capPath = path.resolve(process.cwd(), 'capacitor.config.json');
+    if (fs.existsSync(capPath)) {
+      zip.addLocalFile(capPath);
+    }
+    const zipBuffer = zip.toBuffer();
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="NOIR-Video-Studio-CI-CD-Bundle.zip"');
+    res.send(zipBuffer);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to bundle CI/CD files' });
+  }
 });
 
 async function startServer() {
